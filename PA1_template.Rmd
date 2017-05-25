@@ -21,5 +21,4 @@ output:
 ## Imputing missing values
 
 
-
 ## Are there differences in activity patterns between weekdays and weekends?

@@ -1,0 +1,187 @@
+---
+title: "Reproducible Research: Peer Assessment 1"
+output: 
+  html_document:
+    keep_md: true
+---
+
+
+## Loading and preprocessing the data
+```{r Read and inspect data, cache=TRUE}
+activity <- unzip("activity.zip", files = "activity.csv")
+activity <- read.csv(activity)
+```
+
+```{r Inspect data}
+str(activity)
+head(activity)
+head(unique(activity$steps))
+tail(unique(activity$interval))
+
+## Check percent of NAs in steps
+length(activity$steps[is.na(activity$steps)])/length(activity$steps)
+```
+#### Load useful packages
+```{r Load packages, message=FALSE, warning=FALSE}
+library(lubridate)
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(knitr)
+```
+
+
+## What is mean total number of steps taken per day?
+#### 1. Calculate the total number of steps taken per day
+```{r total steps per day}
+## Assign days to data set
+activity <- mutate(activity, day = 0)
+
+start <- which(activity$interval == 0)
+end <- which(activity$interval == 2355)
+
+a <- 1
+for(i in 1:length(start)){
+    activity$day[start[i]:end[i]] <- a
+    a <- a + 1
+}
+
+activity$date <- ymd(activity$date)
+totdays <- as.numeric(difftime(activity$date[17568], activity$date[1]))
+
+stpday <- data.frame(unique(activity$day), 
+                     sapply(split(activity$steps, activity$day), 
+                            sum, na.rm = TRUE))
+
+## Assign Names to data frame
+names(stpday) <- c("day", "StepsPerDay")
+```
+
+#### Answer 1:
+```{r Answer1}
+stpday
+```
+
+#### 2. Make a Histogram of total steps per day
+```{r Answer2}
+qplot(stpday$StepsPerDay, geom = "histogram", bins = 9, 
+      col = I("red"), main = "Histogram of Total Steps per Day",
+      xlab = "Total Steps per Day")
+```
+
+#### 3. Calculate and report the mean and median total number of steps taken per day
+```{r Answer3}
+summary(stpday$StepsPerDay)[4]
+summary(stpday$StepsPerDay)[3]
+```
+
+
+
+## What is the average daily activity pattern?
+#### 1. Make a time series plot of the 5-min interval (x-axis) and the average number of steps taken, averaged across all days (y-axis).
+
+```{r average daily pattern}
+activity <- cbind(activity, rep(-1, length(activity$day)))
+names(activity)[5] <- "AvgStepPerDay"
+
+for(i in 1:length(stpday$StepsPerDay)){
+    activity$AvgStepPerDay[which(activity$day == as.numeric(i))] <- stpday$StepsPerDay[i]
+}
+
+avgstepsallint <- data.frame(unique(activity$interval), 
+                             sapply(split(activity$steps, activity$interval), 
+                                    mean, na.rm = TRUE) )
+
+names(avgstepsallint) <- c("interval", "avgsteps")
+## Create Plot
+plot(avgstepsallint$interval, avgstepsallint$avgsteps, type = "l",
+     main = "5-min Interval vs Avg Steps per Interval Across All Days",
+     xlab = "5-min Interval", ylab = "Avg Steps per Interval Across All Days",
+     col = "blue", lwd = 2)
+grid(nx=NULL, ny=NULL, col="black", lty="dotted")
+```
+
+#### 2. Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r max steps 5min interval}
+avgstepsallint[which(avgstepsallint$avgsteps == max(avgstepsallint$avgsteps)), ]
+```
+
+
+
+## Imputing missing values
+#### 1. Calculate and report the total number of missing values in the dataset (i.e. the total number of rows with NAs)
+```{r rows missing data}
+na.test <- activity[!complete.cases(activity), ]
+## Number of rows with NA
+length(na.test$steps)
+## Percent of total
+length(na.test$steps)/length(activity$steps)
+```
+
+#### 2. Devise a strategy for filling in all of the missing values in the dataset. The strategy does not need to be sophisticated. For example, you could use the mean/median for that day, or the mean for that 5-minute interval, etc.
+For filling in the missing values the average value for that day is applied.
+
+#### 3. Create a new dataset that is equal to the original dataset but with the missing data filled in.
+```{r filled in dataset}
+activfill <- activity
+activfill$steps[is.na(activfill$steps)] <- activfill$AvgStepPerDay[is.na(activfill$steps)]
+head(activfill)
+tail(activfill)
+```
+
+#### 4. Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day. Do these values differ from the estimates from the first part of the assignment? What is the impact of imputing missing data on the estimates of the total daily number of steps?
+
+```{r histogram of steps taken each day with new data set}
+stpday <- data.frame(unique(activfill$day), 
+                     sapply(split(activfill$steps, activfill$day), 
+                            sum, na.rm = TRUE) )
+
+## Assign Names to data frame
+names(stpday) <- c("day", "StepsPerDay")
+
+## Histogram of total steps per day
+qplot(stpday$StepsPerDay, geom = "histogram", bins = 9, 
+      col = I("red"), main = "Histogram of Total Steps per Day",
+      xlab = "Total Steps per Day")
+
+## Calculate and report the mean and median total number of steps taken per day
+summary(stpday$StepsPerDay)[4]
+summary(stpday$StepsPerDay)[3]
+```
+These values do not differ from the estimates at the first part of the assignment
+since the average values were all zero.  In this case, the NA values were
+removed from the beginning and later they are applied as zeros which doesn't
+affect the total daily number of steps. The number of steps for the NA days is 
+probably higher than zero thus the calculated averages based upon my methodology
+are probably slightly lower than the true average.
+
+
+## Are there differences in activity patterns between weekdays and weekends?
+#### 1. Create a new factor variable in the dataset with two levels - "weekday" and "weekend" indicating whether a given date is a weekday or weekend.
+```{r apply weekday weekend column}
+activfill <- mutate(activfill, daypattern = weekdays(activfill$date))
+
+wkend.row <- which(activfill$daypattern == "Saturday" | activfill$daypattern == "Sunday")
+activfill$daypattern[wkend.row] <- "weekend" 
+
+wkday.row <- which(activfill$daypattern != "weekend")
+activfill$daypattern[wkday.row] <- "weekday"
+
+head(activfill)
+activfill[which(activfill$daypattern == "weekend")[1:6], ]
+```
+#### 2. Make a panel plot containing a time series plot of the 5-min interval and the avg number of steps taken, averaged across all weekdays or weekends
+
+```{r panel plot comparing weekdays and weekends}
+int.dpatt <- data.frame(unique(activfill[, c(3, 6)]), 
+sapply(split(activfill$steps, list(activfill$daypattern, activfill$interval)), 
+mean, na.rm = TRUE))
+names(int.dpatt)[3] <- "AvgStepIntDpatt"
+## Preview Plot
+g <- ggplot(data = int.dpatt, aes(interval, AvgStepIntDpatt, col = daypattern))
+g + geom_line() +
+facet_wrap(~daypattern, nrow = 2, ncol = 1) +
+ggtitle("Interval Steps Averaged Across Weekends and Weekdays") +
+xlab("5-min Interval") +
+ylab("Avg Steps Across Weekdays and Weekends")
+```
